@@ -1,8 +1,3 @@
-# Medical-Chatbot
-
-## ECR Repo
-url : 460628079661.dkr.ecr.ap-southeast-2.amazonaws.com/medicalbot<div align="center">
-
 # Medical Chatbot
 
 **AI-powered medical consultation assistant using Retrieval-Augmented Generation (RAG)**  
@@ -45,11 +40,11 @@ This is **not** a substitute for professional medical advice, diagnosis, or trea
 
 | Layer              | Technology                          |
 |--------------------|-------------------------------------|
-| Backend            | Python (Flask / FastAPI style)      |
+| Backend            | Python (Flask)      |
 | Web Framework      | Flask (templates + static files)    |
 | AI / RAG           | LangChain / LlamaIndex style + embeddings |
-| Vector Store       | FAISS / Chroma / Pinecone (via `store_index.py`) |
-| Frontend           | HTML, CSS, JavaScript (Jinja2)      |
+| Vector Store       | Pinecone (via `store_index.py`) |
+| Frontend           | HTML, CSS (Jinja2)      |
 | Containerization   | Docker                              |
 | CI/CD              | GitHub Actions                      |
 | Cloud Registry     | AWS Elastic Container Registry (ECR)|
