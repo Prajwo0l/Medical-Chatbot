@@ -2,9 +2,9 @@
 
 # 🏥 Medical Chatbot
 
-### AI-Powered Medical Q&A with Retrieval-Augmented Generation (RAG)
+### Advanced RAG-Powered Medical Q&A with Retrieval-Augmented Generation
 
-An intelligent, document-grounded medical assistant that retrieves context from trusted medical literature and generates concise, accurate answers — reducing hallucinations common in pure LLM systems.
+An intelligent, document-grounded medical assistant that retrieves context from trusted medical literature and generates concise, accurate answers — built on an **Advanced RAG pipeline** with hybrid search, reranking, query expansion, contextual compression, and conversation memory.
 
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
 [![Flask](https://img.shields.io/badge/Flask-3.1-000000?style=for-the-badge&logo=flask&logoColor=white)](https://flask.palletsprojects.com/)
@@ -27,29 +27,37 @@ An intelligent, document-grounded medical assistant that retrieves context from 
 
 ## 📖 Overview
 
-The **Medical Chatbot** is a production-ready conversational AI application built on a **RAG (Retrieval-Augmented Generation)** architecture. Instead of relying solely on an LLM's internal knowledge, it:
+The **Medical Chatbot** is a production-ready conversational AI application built on an **Advanced RAG (Retrieval-Augmented Generation)** architecture. It goes far beyond basic RAG by layering multiple retrieval quality improvements on top of each other:
 
-1. **Ingests** medical PDFs and documents into a vector database (Pinecone)
-2. **Retrieves** the most semantically relevant chunks for each user question
-3. **Generates** a concise, grounded answer using GPT-4o — backed by real source material
+1. **Ingests** medical PDFs into a Pinecone vector database with optimized chunking
+2. **Expands** every user question into 3 alternative phrasings (MultiQueryRetriever)
+3. **Retrieves** using both semantic search and keyword search combined (Hybrid Search)
+4. **Compresses** retrieved chunks to keep only relevant sentences (Contextual Compression)
+5. **Reranks** the compressed results using a local cross-encoder model (Free Reranking)
+6. **Generates** a grounded answer via GPT-4o with full conversation memory
+7. **Cites** the source document and page for every answer
 
-This approach drastically reduces hallucinations and ensures answers are rooted in your curated medical knowledge base.
+This pipeline dramatically reduces hallucinations and returns highly accurate, relevant, and trustworthy medical answers.
 
 ---
 
 ## ✨ Features
 
-- 🤖 **RAG Pipeline** — document retrieval + LLM generation for grounded, accurate responses
-- 📄 **PDF Ingestion** — automatically loads and indexes medical PDFs from the `data/` directory
-- 🔍 **Semantic Search** — similarity-based retrieval using HuggingFace sentence embeddings (`all-MiniLM-L6-v2`)
-- 💬 **Web Chat Interface** — clean, responsive UI built with Flask + Jinja2 templates
+- 🤖 **Advanced RAG Pipeline** — 4-stage retrieval pipeline for maximum accuracy
+- 🔀 **Hybrid Search** — combines semantic (Pinecone) + keyword (BM25) retrieval
+- 🔁 **Multi-Query Retrieval** — generates 3 question variants to improve recall
+- 🗜️ **Contextual Compression** — strips irrelevant sentences from retrieved chunks
+- 🏆 **Cross-Encoder Reranking** — re-scores candidates with a local model (no API cost)
+- 💬 **Conversation Memory** — handles follow-up questions using full chat history
+- 📄 **Source Citations** — every answer shows the source document and page number
+- 🔍 **Optimized Chunking** — chunk size 1200 chars / overlap 150 for full medical sentences
 - 🐳 **Fully Dockerized** — one-command containerized deployment
-- 🔄 **CI/CD Pipeline** — automated build, push to AWS ECR, and deploy to EC2 via GitHub Actions
+- 🔄 **CI/CD Pipeline** — automated build → ECR → EC2 via GitHub Actions
 - 🔐 **Secure Config** — all secrets managed via `.env` and GitHub Secrets
 
 ---
 
-## 🧠 Architecture
+## 🧠 Advanced RAG Architecture
 
 ```
 User Question
@@ -58,28 +66,51 @@ User Question
  Flask Web App (app.py)
       │
       ▼
- LangChain Retrieval Chain
-      │
-      ├──► Pinecone VectorStore  ──► Top-3 Relevant Chunks
-      │         (semantic search)
-      │
-      ▼
- GPT-4o (ChatOpenAI)
-      │  (system prompt + retrieved context + user question)
-      │
-      ▼
- Concise Medical Answer (max 3 sentences)
-      │
-      ▼
- Rendered in Chat UI
+ ┌─────────────────────────────────────┐
+ │  STAGE 1 — Query Expansion          │
+ │  MultiQueryRetriever                │
+ │  Generates 3 alternative phrasings  │
+ │  of the user question               │
+ └──────────────┬──────────────────────┘
+                │ 3 query variants
+                ▼
+ ┌─────────────────────────────────────┐
+ │  STAGE 2 — Hybrid Search            │
+ │  EnsembleRetriever                  │
+ │  Semantic (Pinecone) 60% weight     │
+ │  Keyword  (BM25)     40% weight     │
+ │  Merged via Reciprocal Rank Fusion  │
+ └──────────────┬──────────────────────┘
+                │ top 10 candidates
+                ▼
+ ┌─────────────────────────────────────┐
+ │  STAGE 3 — Contextual Compression   │
+ │  LLMChainExtractor                  │
+ │  Keeps only sentences relevant      │
+ │  to the question — removes noise    │
+ └──────────────┬──────────────────────┘
+                │ compressed chunks
+                ▼
+ ┌─────────────────────────────────────┐
+ │  STAGE 4 — Reranking (free, local)  │
+ │  cross-encoder/ms-marco-MiniLM-L6   │
+ │  Re-scores all candidates           │
+ │  Returns top 3 most relevant        │
+ └──────────────┬──────────────────────┘
+                │ top 3 reranked chunks
+                ▼
+ GPT-4o — generates answer + cites source
+                │
+                ▼
+ Chat UI — answer displayed with source
 ```
 
-**Indexing Pipeline (run once):**
+**Indexing Pipeline (run once via `store_index.py`):**
 ```
 data/*.pdf
     │
     ▼
-PyPDFLoader  →  RecursiveCharacterTextSplitter (500 chars, 20 overlap)
+PyPDFLoader  →  RecursiveCharacterTextSplitter (1200 chars, 150 overlap)
     │
     ▼
 HuggingFace Embeddings (all-MiniLM-L6-v2)
@@ -99,6 +130,10 @@ Pinecone VectorStore  ("medical-chatbot" index)
 | **RAG Framework** | LangChain 0.3 |
 | **Embeddings** | HuggingFace `sentence-transformers/all-MiniLM-L6-v2` |
 | **Vector Database** | Pinecone |
+| **Keyword Search** | BM25 via `rank_bm25` |
+| **Reranker** | `cross-encoder/ms-marco-MiniLM-L-6-v2` (local, free) |
+| **Query Expansion** | LangChain `MultiQueryRetriever` |
+| **Compression** | LangChain `ContextualCompressionRetriever` |
 | **PDF Loading** | LangChain `PyPDFLoader` + `DirectoryLoader` |
 | **Frontend** | HTML, CSS, JavaScript (Jinja2 templates) |
 | **Containerization** | Docker |
@@ -109,10 +144,7 @@ Pinecone VectorStore  ("medical-chatbot" index)
 
 ## 📋 Prerequisites
 
-Before getting started, ensure you have the following:
-
 - Python **3.10** or higher
-- `pip` package manager
 - A **Pinecone** account and API key → [pinecone.io](https://www.pinecone.io/)
 - An **OpenAI** API key → [platform.openai.com](https://platform.openai.com/)
 - **Docker** (optional, for containerized deployment)
@@ -132,13 +164,12 @@ cd Medical-Chatbot
 ### 2. Create and Activate a Virtual Environment
 
 ```bash
-# Create virtual environment
 python -m venv env
 
-# Activate — macOS / Linux
+# macOS / Linux
 source env/bin/activate
 
-# Activate — Windows
+# Windows
 env\Scripts\activate
 ```
 
@@ -148,16 +179,11 @@ env\Scripts\activate
 pip install -r requirements.txt
 ```
 
+> The cross-encoder reranker model (`cross-encoder/ms-marco-MiniLM-L-6-v2`) downloads automatically from HuggingFace on first startup (~80MB, one time only).
+
 ### 4. Configure Environment Variables
 
-Create a `.env` file in the project root:
-
-```bash
-touch .env   # macOS / Linux
-# or manually create .env on Windows
-```
-
-Add your API keys to `.env`:
+Create a `.env` file in the project root and add your API keys:
 
 ```env
 PINECONE_API_KEY=your_pinecone_api_key_here
@@ -178,20 +204,13 @@ data/
 
 ### 6. Build the Pinecone Vector Index
 
-This step reads all PDFs, generates embeddings, and uploads them to Pinecone. **Run this once** (or whenever you add new documents):
+Run this once (or whenever you add new documents):
 
 ```bash
 python store_index.py
 ```
 
-Expected output:
-```
-Available indexes: ['medical-chatbot']
-Connected to the index: medical-chatbot
-Indexing completed successfully.
-```
-
-> 💡 Make sure a Pinecone index named `medical-chatbot` exists in your Pinecone dashboard before running this script. Create it with **1536 dimensions** if using OpenAI embeddings, or **384 dimensions** for `all-MiniLM-L6-v2`.
+> 💡 Create a Pinecone index named `medical-chatbot` with **384 dimensions** for `all-MiniLM-L6-v2` before running this script.
 
 ### 7. Run the Application
 
@@ -199,25 +218,15 @@ Indexing completed successfully.
 python app.py
 ```
 
-Open your browser and navigate to:
-
-```
-http://localhost:8080
-```
+Visit `http://localhost:8080` in your browser.
 
 ---
 
 ## 🐳 Docker Deployment
 
-### Build the Image
-
 ```bash
 docker build -t medical-chatbot:latest .
-```
 
-### Run the Container
-
-```bash
 docker run -d \
   -p 8080:8080 \
   -e PINECONE_API_KEY=your_pinecone_api_key \
@@ -226,40 +235,11 @@ docker run -d \
   medical-chatbot:latest
 ```
 
-Visit `http://localhost:8080` in your browser.
-
 ---
 
 ## ☁️ AWS CI/CD Deployment
 
-This project includes a fully automated **GitHub Actions** pipeline (`.github/workflows/cicd.yaml`) that:
-
-1. **Builds** the Docker image
-2. **Pushes** it to **AWS Elastic Container Registry (ECR)**
-3. **Deploys** and runs it on an **AWS EC2** instance
-
-### Required GitHub Secrets
-
-Navigate to your repository → **Settings → Secrets and variables → Actions** and add:
-
-| Secret Name | Description |
-|---|---|
-| `AWS_ACCESS_KEY_ID` | Your AWS IAM access key ID |
-| `AWS_SECRET_ACCESS_KEY` | Your AWS IAM secret access key |
-| `AWS_DEFAULT_REGION` | AWS region (e.g., `us-east-1`) |
-| `ECR_REPO` | Your ECR repository name |
-| `PINECONE_API_KEY` | Your Pinecone API key |
-| `OPENAI_API_KEY` | Your OpenAI API key |
-
-### Trigger Deployment
-
-Every push to the `main` branch automatically triggers the full CI/CD pipeline:
-
-```bash
-git push origin main
-```
-
-The pipeline runs two jobs in sequence:
+Every push to `main` triggers a fully automated GitHub Actions pipeline:
 
 ```
 Continuous-Integration
@@ -270,9 +250,21 @@ Continuous-Integration
   └── Push image to ECR
 
 Continuous-Deployment
+  └── SSH into EC2
   └── Pull latest image from ECR
-  └── Run container on EC2 with environment variables
+  └── Run container on port 8080
 ```
+
+### Required GitHub Secrets
+
+| Secret | Description |
+|---|---|
+| `AWS_ACCESS_KEY_ID` | AWS IAM access key |
+| `AWS_SECRET_ACCESS_KEY` | AWS IAM secret key |
+| `AWS_DEFAULT_REGION` | e.g. `us-east-1` |
+| `ECR_REPO` | ECR repository name |
+| `PINECONE_API_KEY` | Pinecone API key |
+| `OPENAI_API_KEY` | OpenAI API key |
 
 ---
 
@@ -288,17 +280,17 @@ Medical-Chatbot/
 ├── research/                  # Jupyter notebooks for experimentation
 ├── src/
 │   ├── __init__.py
-│   ├── helper.py              # PDF loading, chunking, embedding logic
-│   └── prompt.py              # System prompt for the LLM
+│   ├── helper.py              # PDF loading, chunking, embedding, reranker
+│   └── prompt.py              # System prompts + multi-query prompt template
 ├── static/                    # CSS, JS, and static assets
 ├── templates/
 │   └── chat.html              # Chat web interface (Jinja2)
 ├── .env                       # Environment variables (not committed)
 ├── .gitignore
-├── app.py                     # Flask application entry point
+├── app.py                     # Flask app + full Advanced RAG pipeline
 ├── Dockerfile                 # Container build instructions
 ├── requirements.txt           # Python dependencies
-├── setup.py                   # Package setup (author: Prajwol Lamichhane)
+├── setup.py                   # Package setup
 ├── store_index.py             # One-time script to build Pinecone index
 └── README.md
 ```
@@ -311,32 +303,40 @@ Medical-Chatbot/
 
 | Variable | Required | Description |
 |---|---|---|
-| `PINECONE_API_KEY` | ✅ | API key from your Pinecone dashboard |
+| `PINECONE_API_KEY` | ✅ | API key from Pinecone dashboard |
 | `OPENAI_API_KEY` | ✅ | API key from OpenAI platform |
 
 ### Key Parameters
 
-| Parameter | Location | Default | Description |
+| Parameter | Location | Value | Description |
 |---|---|---|---|
-| `chunk_size` | `helper.py` | `500` | Characters per text chunk |
-| `chunk_overlap` | `helper.py` | `20` | Overlap between chunks |
-| `search_k` | `app.py` | `3` | Number of chunks retrieved per query |
-| `model` | `app.py` | `gpt-4o` | OpenAI model used for generation |
+| `chunk_size` | `helper.py` | `1200` | Characters per text chunk (was 500) |
+| `chunk_overlap` | `helper.py` | `150` | Overlap between chunks (was 20) |
+| `semantic_k` | `app.py` | `10` | Candidates retrieved from Pinecone |
+| `bm25_k` | `app.py` | `10` | Candidates from BM25 keyword search |
+| `rerank_top_n` | `app.py` | `3` | Final chunks passed to GPT-4o after reranking |
+| `bm25_weight` | `app.py` | `0.4` | Weight of keyword search in hybrid retrieval |
+| `semantic_weight` | `app.py` | `0.6` | Weight of semantic search in hybrid retrieval |
+| `model` | `app.py` | `gpt-4o` | OpenAI model for generation |
+| `reranker_model` | `helper.py` | `cross-encoder/ms-marco-MiniLM-L-6-v2` | Local reranker |
 | `embedding_model` | `helper.py` | `all-MiniLM-L6-v2` | HuggingFace embedding model |
-| `index_name` | `app.py` / `store_index.py` | `medical-chatbot` | Pinecone index name |
+| `history_limit` | `app.py` | `10` | Max messages kept in session memory |
 | `port` | `app.py` | `8080` | Flask server port |
 
 ---
 
 ## 💬 How It Works — Step by Step
 
-1. A user types a medical question in the chat interface
-2. The Flask app receives the message via `POST /get`
-3. LangChain encodes the question using HuggingFace embeddings
-4. Pinecone retrieves the **top 3 most relevant document chunks** via cosine similarity
-5. The retrieved chunks are injected into the system prompt as `{context}`
-6. GPT-4o generates a response in **3 sentences or less**, grounded in the retrieved context
-7. The answer is returned to the browser and displayed in the chat UI
+1. User types a medical question in the chat interface
+2. Flask receives the message via `POST /get` and loads chat history from session
+3. The history-aware retriever reformulates the question if it is a follow-up
+4. `MultiQueryRetriever` generates 3 alternative phrasings of the question
+5. `EnsembleRetriever` searches Pinecone (semantic) and BM25 (keyword) with all 3 variants, merges results via Reciprocal Rank Fusion
+6. `ContextualCompressionRetriever` compresses each chunk — keeping only the sentences relevant to the question
+7. `rerank_documents()` scores all compressed chunks with a local cross-encoder and returns the top 3
+8. GPT-4o generates a response in 3 sentences or less, grounded in the reranked context
+9. Source document name and page number are extracted and appended to the answer
+10. Answer is saved to session memory and returned to the browser
 
 ---
 
