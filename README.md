@@ -2,9 +2,9 @@
 
 # 🏥 Medical Chatbot
 
-### Advanced RAG-Powered Medical Q&A with Retrieval-Augmented Generation
+### Production-Grade Medical Q&A with a 7-Stage Advanced RAG Pipeline
 
-An intelligent, document-grounded medical assistant that retrieves context from trusted medical literature and generates concise, accurate answers — built on an **Advanced RAG pipeline** with hybrid search, reranking, query expansion, contextual compression, and conversation memory.
+An intelligent, document-grounded medical assistant that retrieves answers from trusted medical literature using a fully implemented advanced RAG architecture — featuring contextual chunk headers, hierarchical chunking, sentence-window retrieval, hybrid search, multi-query expansion, contextual compression, cross-encoder reranking, and conversation memory.
 
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
 [![Flask](https://img.shields.io/badge/Flask-3.1-000000?style=for-the-badge&logo=flask&logoColor=white)](https://flask.palletsprojects.com/)
@@ -27,128 +27,142 @@ An intelligent, document-grounded medical assistant that retrieves context from 
 
 ## 📖 Overview
 
-The **Medical Chatbot** is a production-ready conversational AI application built on an **Advanced RAG (Retrieval-Augmented Generation)** architecture. It goes far beyond basic RAG by layering multiple retrieval quality improvements on top of each other:
+The **Medical Chatbot** is a production-ready conversational AI application built on a fully implemented **Advanced RAG (Retrieval-Augmented Generation)** pipeline. It goes well beyond basic RAG by applying seven retrieval quality improvements at both indexing and query time.
 
-1. **Ingests** medical PDFs into a Pinecone vector database with optimized chunking
-2. **Expands** every user question into 3 alternative phrasings (MultiQueryRetriever)
-3. **Retrieves** using both semantic search and keyword search combined (Hybrid Search)
-4. **Compresses** retrieved chunks to keep only relevant sentences (Contextual Compression)
-5. **Reranks** the compressed results using a local cross-encoder model (Free Reranking)
-6. **Generates** a grounded answer via GPT-4o with full conversation memory
-7. **Cites** the source document and page for every answer
+Instead of simply embedding raw text and doing a cosine similarity search, this system:
 
-This pipeline dramatically reduces hallucinations and returns highly accurate, relevant, and trustworthy medical answers.
+1. Prepends every chunk with source and page metadata before indexing
+2. Creates a parent-child chunk hierarchy for precision retrieval with rich context
+3. Builds a sentence-window index for fine-grained keyword matching
+4. Expands every user question into multiple alternative phrasings
+5. Combines semantic and keyword search results via Reciprocal Rank Fusion
+6. Compresses retrieved chunks to keep only question-relevant sentences
+7. Re-scores all candidates with a local cross-encoder and returns only the top 3
 
----
-
-## ✨ Features
-
-- 🤖 **Advanced RAG Pipeline** — 4-stage retrieval pipeline for maximum accuracy
-- 🔀 **Hybrid Search** — combines semantic (Pinecone) + keyword (BM25) retrieval
-- 🔁 **Multi-Query Retrieval** — generates 3 question variants to improve recall
-- 🗜️ **Contextual Compression** — strips irrelevant sentences from retrieved chunks
-- 🏆 **Cross-Encoder Reranking** — re-scores candidates with a local model (no API cost)
-- 💬 **Conversation Memory** — handles follow-up questions using full chat history
-- 📄 **Source Citations** — every answer shows the source document and page number
-- 🔍 **Optimized Chunking** — chunk size 1200 chars / overlap 150 for full medical sentences
-- 🐳 **Fully Dockerized** — one-command containerized deployment
-- 🔄 **CI/CD Pipeline** — automated build → ECR → EC2 via GitHub Actions
-- 🔐 **Secure Config** — all secrets managed via `.env` and GitHub Secrets
+Every answer is grounded in real medical documents, cited with source and page number, and aware of the full conversation history.
 
 ---
 
-## 🧠 Advanced RAG Architecture
+## ✨ Feature Highlights
 
-```
-User Question
-      │
-      ▼
- Flask Web App (app.py)
-      │
-      ▼
- ┌─────────────────────────────────────┐
- │  STAGE 1 — Query Expansion          │
- │  MultiQueryRetriever                │
- │  Generates 3 alternative phrasings  │
- │  of the user question               │
- └──────────────┬──────────────────────┘
-                │ 3 query variants
-                ▼
- ┌─────────────────────────────────────┐
- │  STAGE 2 — Hybrid Search            │
- │  EnsembleRetriever                  │
- │  Semantic (Pinecone) 60% weight     │
- │  Keyword  (BM25)     40% weight     │
- │  Merged via Reciprocal Rank Fusion  │
- └──────────────┬──────────────────────┘
-                │ top 10 candidates
-                ▼
- ┌─────────────────────────────────────┐
- │  STAGE 3 — Contextual Compression   │
- │  LLMChainExtractor                  │
- │  Keeps only sentences relevant      │
- │  to the question — removes noise    │
- └──────────────┬──────────────────────┘
-                │ compressed chunks
-                ▼
- ┌─────────────────────────────────────┐
- │  STAGE 4 — Reranking (free, local)  │
- │  cross-encoder/ms-marco-MiniLM-L6   │
- │  Re-scores all candidates           │
- │  Returns top 3 most relevant        │
- └──────────────┬──────────────────────┘
-                │ top 3 reranked chunks
-                ▼
- GPT-4o — generates answer + cites source
-                │
-                ▼
- Chat UI — answer displayed with source
-```
+| Feature | Implementation |
+|---|---|
+| Contextual chunk headers | Source filename + page prepended to every chunk at indexing time |
+| Hierarchical chunking | Parent chunks (1200 chars) for context, child chunks (400 chars) for precision |
+| Sentence-window retrieval | Sentence-level BM25 with ±3 sentence context window |
+| Multi-query expansion | 3 alternative phrasings generated per question via GPT-4o |
+| Hybrid search | Pinecone semantic (60%) + BM25 keyword (40%) via EnsembleRetriever |
+| Contextual compression | LLMChainExtractor strips irrelevant sentences from retrieved chunks |
+| Cross-encoder reranking | Free local model re-scores candidates, returns top 3 (no API cost) |
+| Conversation memory | History-aware retriever + Flask session — follow-up questions work correctly |
+| Source citations | Document name and page number appended to every answer |
+| Upgraded embeddings | BAAI/bge-base-en-v1.5 (768-dim) replacing all-MiniLM-L6-v2 (384-dim) |
+| CI/CD pipeline | GitHub Actions → Docker build → AWS ECR → AWS EC2 auto-deploy |
 
-**Indexing Pipeline (run once via `store_index.py`):**
+---
+
+## 🧠 Architecture
+
+### Indexing Pipeline — run once via `store_index.py`
+
 ```
 data/*.pdf
     │
     ▼
-PyPDFLoader  →  RecursiveCharacterTextSplitter (1200 chars, 150 overlap)
+PyPDFLoader — loads all PDF pages
     │
     ▼
-HuggingFace Embeddings (all-MiniLM-L6-v2)
+filter_to_minimal_docs() — extracts source + page metadata
     │
     ▼
-Pinecone VectorStore  ("medical-chatbot" index)
+add_contextual_headers()                    ← TECHNIQUE 1
+Prepends "Source: file.pdf | Page: N" to every chunk
+    │
+    ▼
+hierarchical_split()                        ← TECHNIQUE 3
+├── Parent chunks (1200 chars, 150 overlap) — stored in metadata
+└── Child chunks  (400 chars,  50 overlap)  — embedded into Pinecone
+    │
+    ▼
+BAAI/bge-base-en-v1.5 embeddings (768-dim) ← TECHNIQUE 5
+    │
+    ▼
+Pinecone VectorStore ("medical-chatbot" index)
+Child chunks stored. Each child carries parent_content in metadata.
+```
+
+### Query Pipeline — runs on every user message in `app.py`
+
+```
+User question
+    │
+    ▼
+History-aware reformulation
+Converts follow-up questions into standalone queries using chat history
+    │
+    ▼
+MultiQueryRetriever                         ← TECHNIQUE 2 (query expansion)
+Generates 3 alternative phrasings → searches Pinecone with all 3
+    │
+    ▼
+EnsembleRetriever (Hybrid Search)           ← TECHNIQUE 6 (hybrid search)
+├── Pinecone semantic search (60% weight)
+└── BM25 sentence-window keyword search (40% weight)   ← TECHNIQUE 4
+    merged via Reciprocal Rank Fusion
+    │
+    ▼
+ContextualCompressionRetriever              ← contextual compression
+LLMChainExtractor removes irrelevant sentences from each chunk
+    │
+    ▼
+rerank_documents()                          ← TECHNIQUE 7 (reranking)
+cross-encoder/ms-marco-MiniLM-L-6-v2
+Re-scores all candidates → returns top 3
+    │
+    ▼
+GPT-4o (gpt-4o)
+Generates answer from reranked context + chat history
+    │
+    ▼
+Source citation appended (filename + page)
+    │
+    ▼
+Answer displayed in chat UI + saved to session memory
 ```
 
 ---
 
 ## 🛠️ Tech Stack
 
-| Layer | Technology |
-|---|---|
-| **Backend** | Python 3.10, Flask 3.1 |
-| **AI / LLM** | OpenAI GPT-4o via `langchain-openai` |
-| **RAG Framework** | LangChain 0.3 |
-| **Embeddings** | HuggingFace `sentence-transformers/all-MiniLM-L6-v2` |
-| **Vector Database** | Pinecone |
-| **Keyword Search** | BM25 via `rank_bm25` |
-| **Reranker** | `cross-encoder/ms-marco-MiniLM-L-6-v2` (local, free) |
-| **Query Expansion** | LangChain `MultiQueryRetriever` |
-| **Compression** | LangChain `ContextualCompressionRetriever` |
-| **PDF Loading** | LangChain `PyPDFLoader` + `DirectoryLoader` |
-| **Frontend** | HTML, CSS, JavaScript (Jinja2 templates) |
-| **Containerization** | Docker |
-| **CI/CD** | GitHub Actions |
-| **Cloud** | AWS ECR (image registry) + AWS EC2 (runtime) |
+| Layer | Technology | Purpose |
+|---|---|---|
+| **Backend** | Python 3.10, Flask 3.1 | Web server and routing |
+| **LLM** | OpenAI GPT-4o | Answer generation |
+| **RAG Framework** | LangChain 0.3 | Retrieval chains and orchestration |
+| **Embeddings** | BAAI/bge-base-en-v1.5 (768-dim) | Semantic vector encoding |
+| **Vector Database** | Pinecone | Semantic similarity search |
+| **Keyword Search** | BM25 via rank_bm25 | Exact term matching |
+| **Reranker** | cross-encoder/ms-marco-MiniLM-L-6-v2 | Local relevance re-scoring |
+| **Query Expansion** | LangChain MultiQueryRetriever | Alternative question generation |
+| **Compression** | LangChain ContextualCompressionRetriever | Chunk noise reduction |
+| **Hybrid Fusion** | LangChain EnsembleRetriever | Reciprocal Rank Fusion |
+| **PDF Loading** | PyPDFLoader + DirectoryLoader | Document ingestion |
+| **Frontend** | HTML, CSS, JavaScript (Jinja2) | Chat interface |
+| **Containerization** | Docker | Portable deployment |
+| **CI/CD** | GitHub Actions | Automated build and deploy |
+| **Cloud** | AWS ECR + AWS EC2 | Image registry and runtime |
 
 ---
 
 ## 📋 Prerequisites
 
 - Python **3.10** or higher
-- A **Pinecone** account and API key → [pinecone.io](https://www.pinecone.io/)
+- A **Pinecone** account with an index created at **768 dimensions** → [pinecone.io](https://www.pinecone.io/)
 - An **OpenAI** API key → [platform.openai.com](https://platform.openai.com/)
 - **Docker** (optional, for containerized deployment)
 - **AWS CLI** configured (optional, for cloud deployment)
+
+> ⚠️ **Important:** This project uses `BAAI/bge-base-en-v1.5` which produces **768-dimensional** vectors. Your Pinecone index must be created with **768 dimensions**. If you previously used `all-MiniLM-L6-v2` (384-dim), delete the old index and create a new one.
 
 ---
 
@@ -179,54 +193,86 @@ env\Scripts\activate
 pip install -r requirements.txt
 ```
 
-> The cross-encoder reranker model (`cross-encoder/ms-marco-MiniLM-L-6-v2`) downloads automatically from HuggingFace on first startup (~80MB, one time only).
+> The reranker model (`cross-encoder/ms-marco-MiniLM-L-6-v2`) and embedding model (`BAAI/bge-base-en-v1.5`) download automatically from HuggingFace on first run. Combined download is approximately 500MB and happens only once.
 
 ### 4. Configure Environment Variables
 
-Create a `.env` file in the project root and add your API keys:
+Create a `.env` file in the project root:
 
 ```env
 PINECONE_API_KEY=your_pinecone_api_key_here
 OPENAI_API_KEY=your_openai_api_key_here
 ```
 
-> ⚠️ **Never commit your `.env` file.** It is already listed in `.gitignore`.
+> ⚠️ Never commit your `.env` file. It is already listed in `.gitignore`.
 
-### 5. Add Your Medical Documents
+### 5. Add Medical Documents
 
-Place your medical PDF files inside the `data/` directory:
+Place your PDF files in the `data/` directory:
 
 ```
 data/
-└── Medical_book.pdf      ← already included
-└── your_document.pdf     ← add more PDFs here
+└── Medical_book.pdf       ← included by default
+└── your_document.pdf      ← add more PDFs here
 ```
 
-### 6. Build the Pinecone Vector Index
+### 6. Create Pinecone Index
 
-Run this once (or whenever you add new documents):
+In your Pinecone dashboard, create an index with these settings:
+
+| Setting | Value |
+|---|---|
+| Index name | `medical-chatbot` |
+| Dimensions | `768` |
+| Metric | `cosine` |
+
+### 7. Build the Vector Index
+
+Run this once (or whenever you add new documents). This applies contextual headers, performs hierarchical chunking, and uploads child chunks to Pinecone:
 
 ```bash
 python store_index.py
 ```
 
-> 💡 Create a Pinecone index named `medical-chatbot` with **384 dimensions** for `all-MiniLM-L6-v2` before running this script.
+Expected output:
+```
+Loading PDFs...
+Adding contextual headers...
+Running hierarchical chunking...
+  Parent chunks : 312
+  Child chunks  : 847  (these get embedded)
+Loading embedding model (BAAI/bge-base-en-v1.5)...
+Connected to index: medical-chatbot
+Indexing child chunks into Pinecone...
+Indexing completed. 847 child chunks stored in Pinecone.
+Run python app.py to start the chatbot.
+```
 
-### 7. Run the Application
+### 8. Run the Application
 
 ```bash
 python app.py
 ```
 
-Visit `http://localhost:8080` in your browser.
+Open your browser and visit:
+
+```
+http://localhost:8080
+```
 
 ---
 
 ## 🐳 Docker Deployment
 
+### Build the Image
+
 ```bash
 docker build -t medical-chatbot:latest .
+```
 
+### Run the Container
+
+```bash
 docker run -d \
   -p 8080:8080 \
   -e PINECONE_API_KEY=your_pinecone_api_key \
@@ -235,11 +281,13 @@ docker run -d \
   medical-chatbot:latest
 ```
 
+Visit `http://localhost:8080` in your browser.
+
 ---
 
 ## ☁️ AWS CI/CD Deployment
 
-Every push to `main` triggers a fully automated GitHub Actions pipeline:
+Every push to the `main` branch triggers a fully automated GitHub Actions pipeline:
 
 ```
 Continuous-Integration
@@ -250,18 +298,21 @@ Continuous-Integration
   └── Push image to ECR
 
 Continuous-Deployment
-  └── SSH into EC2
+  └── SSH into EC2 instance
   └── Pull latest image from ECR
-  └── Run container on port 8080
+  └── Stop old container
+  └── Run new container on port 8080
 ```
 
 ### Required GitHub Secrets
 
+Go to your repository → **Settings → Secrets and variables → Actions** and add:
+
 | Secret | Description |
 |---|---|
-| `AWS_ACCESS_KEY_ID` | AWS IAM access key |
-| `AWS_SECRET_ACCESS_KEY` | AWS IAM secret key |
-| `AWS_DEFAULT_REGION` | e.g. `us-east-1` |
+| `AWS_ACCESS_KEY_ID` | AWS IAM access key ID |
+| `AWS_SECRET_ACCESS_KEY` | AWS IAM secret access key |
+| `AWS_DEFAULT_REGION` | AWS region (e.g. `us-east-1`) |
 | `ECR_REPO` | ECR repository name |
 | `PINECONE_API_KEY` | Pinecone API key |
 | `OPENAI_API_KEY` | OpenAI API key |
@@ -274,24 +325,30 @@ Continuous-Deployment
 Medical-Chatbot/
 ├── .github/
 │   └── workflows/
-│       └── cicd.yaml          # GitHub Actions CI/CD pipeline
+│       └── cicd.yaml              # GitHub Actions CI/CD pipeline
 ├── data/
-│   └── Medical_book.pdf       # Source medical document(s)
-├── research/                  # Jupyter notebooks for experimentation
+│   └── Medical_book.pdf           # Source medical document(s)
+├── research/                      # Jupyter notebooks for experimentation
 ├── src/
 │   ├── __init__.py
-│   ├── helper.py              # PDF loading, chunking, embedding, reranker
-│   └── prompt.py              # System prompts + multi-query prompt template
-├── static/                    # CSS, JS, and static assets
+│   ├── helper.py                  # Core RAG utilities:
+│   │                              #   loadpdf, filter_to_minimal_docs
+│   │                              #   add_contextual_headers (technique 1)
+│   │                              #   hierarchical_split     (technique 3)
+│   │                              #   sentence_window_split  (technique 4)
+│   │                              #   download_embedding     (technique 5)
+│   │                              #   rerank_documents       (technique 7)
+│   └── prompt.py                  # System prompts + multi-query template
+├── static/                        # CSS, JS, static assets
 ├── templates/
-│   └── chat.html              # Chat web interface (Jinja2)
-├── .env                       # Environment variables (not committed)
+│   └── chat.html                  # Chat web interface (Jinja2)
+├── .env                           # API keys — never commit this
 ├── .gitignore
-├── app.py                     # Flask app + full Advanced RAG pipeline
-├── Dockerfile                 # Container build instructions
-├── requirements.txt           # Python dependencies
-├── setup.py                   # Package setup
-├── store_index.py             # One-time script to build Pinecone index
+├── app.py                         # Flask app + full query-time RAG pipeline
+├── Dockerfile                     # Container build instructions
+├── requirements.txt               # Python dependencies
+├── setup.py                       # Package setup
+├── store_index.py                 # Indexing pipeline — run once
 └── README.md
 ```
 
@@ -308,35 +365,48 @@ Medical-Chatbot/
 
 ### Key Parameters
 
-| Parameter | Location | Value | Description |
+| Parameter | File | Value | Description |
 |---|---|---|---|
-| `chunk_size` | `helper.py` | `1200` | Characters per text chunk (was 500) |
-| `chunk_overlap` | `helper.py` | `150` | Overlap between chunks (was 20) |
+| `embedding_model` | `helper.py` | `BAAI/bge-base-en-v1.5` | HuggingFace embedding model (768-dim) |
+| `reranker_model` | `helper.py` | `cross-encoder/ms-marco-MiniLM-L-6-v2` | Local cross-encoder reranker |
+| `parent_chunk_size` | `helper.py` | `1200` | Parent chunk size for hierarchical split |
+| `parent_chunk_overlap` | `helper.py` | `150` | Parent chunk overlap (12.5%) |
+| `child_chunk_size` | `helper.py` | `400` | Child chunk size for precise embedding |
+| `child_chunk_overlap` | `helper.py` | `50` | Child chunk overlap |
+| `sentence_window` | `helper.py` | `3` | Sentences of context around each retrieved sentence |
 | `semantic_k` | `app.py` | `10` | Candidates retrieved from Pinecone |
 | `bm25_k` | `app.py` | `10` | Candidates from BM25 keyword search |
+| `semantic_weight` | `app.py` | `0.6` | Hybrid search weight for semantic results |
+| `bm25_weight` | `app.py` | `0.4` | Hybrid search weight for keyword results |
 | `rerank_top_n` | `app.py` | `3` | Final chunks passed to GPT-4o after reranking |
-| `bm25_weight` | `app.py` | `0.4` | Weight of keyword search in hybrid retrieval |
-| `semantic_weight` | `app.py` | `0.6` | Weight of semantic search in hybrid retrieval |
-| `model` | `app.py` | `gpt-4o` | OpenAI model for generation |
-| `reranker_model` | `helper.py` | `cross-encoder/ms-marco-MiniLM-L-6-v2` | Local reranker |
-| `embedding_model` | `helper.py` | `all-MiniLM-L6-v2` | HuggingFace embedding model |
 | `history_limit` | `app.py` | `10` | Max messages kept in session memory |
+| `model` | `app.py` | `gpt-4o` | OpenAI model for generation |
 | `port` | `app.py` | `8080` | Flask server port |
 
 ---
 
 ## 💬 How It Works — Step by Step
 
-1. User types a medical question in the chat interface
-2. Flask receives the message via `POST /get` and loads chat history from session
-3. The history-aware retriever reformulates the question if it is a follow-up
+**At indexing time (`store_index.py`):**
+
+1. All PDF files in `data/` are loaded page by page using `PyPDFLoader`
+2. Each page is enriched with a contextual header: `Source: filename | Page: N`
+3. Documents are split hierarchically into parent chunks (1200 chars) and child chunks (400 chars)
+4. Each child chunk stores the full parent content in its metadata for context retrieval
+5. Child chunks are embedded using `BAAI/bge-base-en-v1.5` and stored in Pinecone
+
+**At query time (`app.py`):**
+
+1. User types a question in the chat interface
+2. Flask loads the chat history from the session
+3. The history-aware retriever reformulates follow-up questions into standalone queries
 4. `MultiQueryRetriever` generates 3 alternative phrasings of the question
-5. `EnsembleRetriever` searches Pinecone (semantic) and BM25 (keyword) with all 3 variants, merges results via Reciprocal Rank Fusion
-6. `ContextualCompressionRetriever` compresses each chunk — keeping only the sentences relevant to the question
+5. `EnsembleRetriever` searches Pinecone (semantic) and a sentence-window BM25 index (keyword) with all variants and merges results via Reciprocal Rank Fusion
+6. `ContextualCompressionRetriever` strips sentences from each chunk that are not relevant to the question
 7. `rerank_documents()` scores all compressed chunks with a local cross-encoder and returns the top 3
-8. GPT-4o generates a response in 3 sentences or less, grounded in the reranked context
-9. Source document name and page number are extracted and appended to the answer
-10. Answer is saved to session memory and returned to the browser
+8. GPT-4o generates a concise answer (max 3 sentences) grounded in the reranked context
+9. Source document and page number are extracted and appended to the answer
+10. The answer and question are saved to session memory and returned to the browser
 
 ---
 
